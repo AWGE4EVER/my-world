@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <script src="js/line.js"></script>
+    <script src="js/round.js"></script>
+    <script src="js/tools.js"></script>
+    <script src="js/ckeditor/ckeditor.js"></script>
+    <link rel="stylesheet" href="css/layout.css">
+</head>
+<body>
+    <div class="uni" id="uni" style="animation:unset;">
+        <svg class="svg" id="svg"></svg>
+        <div class="btnlist">
+            <div class="changeMode" id="changeMode">Presentation mode</div>
+            <div class="reset" id="reset">reset</div>
+        </div>
+        <div class="editor hideright" id="editor">
+            <div name="ckeditor"></div>
+            <button class="closeEditor" id="closeEditor">X</button>
+            <div class="editorContent" id="editorContent"></div>
+        </div>
+
+    </div>
+    <script>
+        let all_rounds = {},all_lines = {},mx,my,lx,ly,delline,moveround,editround,timing,spacedown,moveuni,ckeditor=CKEDITOR.replace('ckeditor');
+
+        setInterval(()=>{
+           localStorage.setItem('data07',JSON.stringify({all_rounds: all_rounds,all_lines: all_lines}))
+        });
+        let data07 = JSON.parse(localStorage.getItem('data07'))
+        if (!data07 || Object.keys(data07.all_rounds).length === 0){
+            let x = uni.offsetWidth / 2 - 49
+            let y = uni.offsetHeight / 2 - 49
+            new Round(1,x,y)
+        }else{
+            for(let r in data07.all_rounds){
+                let round = data07.all_rounds[r]
+                let newround = new Round(round.num,round.x,round.y)
+                newround.title = round.title
+                newround.content = round.content
+            }
+            for(let l in data07.all_lines){
+                let line = data07.all_lines[l]
+                new Line(line.start,line.end,line.fxn1,line.fxn2,line.fx1,line.fx2)
+            }
+        }
+        uni.addEventListener('click',any)
+        function any(e) {
+            let target = e.target
+            if(isList(target,'fanp') && !isList(target,'locked')){
+                let id = all_rounds[Object.keys(all_rounds).pop()].num
+                let fxn1 = attr(target,'fxn1')
+                let fxn2 = attr(target,'fxn2')
+                all_rounds[round(target).id].createFx(++id,fxn1,fxn2)
+            }
+            if(isList(target,'del')){
+                all_rounds[round(target).id].remove()
+            }
+            if(isList(target,'line')){
+                delline = all_lines[target.id]
+                let dl = $dom('.delline')
+                dl ? dl.classList.remove('delline') : ''
+                target.classList.add('delline')
+            }
+            if(isList(target,'reset')){
+                for (let r in all_rounds) {
+                    all_rounds[r].remove()
+                }
+                let x = uni.offsetWidth / 2 - 49
+                let y = uni.offsetHeight / 2 - 49
+                new Round(1,x,y)
+            }
+            if(isList(target,'edit')){
+                closeEditor.click()
+                editor.classList.remove('hideright')
+                editround = all_rounds[round(target).id]
+                render(editround,'text')
+                timing = setInterval(()=>{
+                    editround.title = ckeditor.getData()
+                })
+            }
+            if(isList(target,'closeEditor')){
+                editor.classList.add('hideright')
+                clearInterval(timing)
+                editround = null
+            }
+            if(isList(target,'changeMode')){
+                if(target.innerHTML === 'Presentation mode'){
+                    closeEditor.click()
+                    target.innerHTML = 'Design mode'
+                    document.documentElement.requestFullscreen()
+                    editor.classList.add('ppt')
+                    let root = all_rounds[Object.keys(all_rounds)[0]]
+                    render(root,'button')
+                }else{
+                    target.innerHTML = 'Presentation mode'
+                    document.exitFullscreen()
+                    editor.classList.remove('ppt')
+                }
+            }
+            if(isList(target,'goFleX') && changeMode.innerHTML === 'Design mode' && uni.style.animation === 'unset'){
+                let fx = attr(target,'fx')
+                let fxround = all_rounds[attr(target,'fxround')]
+                uni.style.animation = `go${fx} 1s 1`
+                setTimeout(() => {
+                    render(fxround,'button')
+                    uni.style.animation = 'unset'
+                },500)
+            }
+            if(isList(target,'miniround')){
+                let fxround = all_rounds[attr(target,'round')]
+                uni.style.animation = 'shineshow .8s 1'
+                setTimeout(()=>{
+                    render(fxround,'button')
+                    uni.style.animation = 'unset'
+                },300)
+            }
+        }
+        uni.addEventListener('mousedown',(e)=>{
+            let target = e.target
+            setTimeout(()=>{
+                if(!e.shiftKey && (isList(target,'fanp') || isList(target,'fan'))){
+                    moveround = all_rounds[round(target).id]
+                    lx = e.x - moveround.x
+                    ly = e.y - moveround.y
+                }
+                if(spacedown && isList(target,'svg')){
+                    moveuni = true
+                    mx = e.x
+                    my = e.y
+                }
+            },38)
+        })
+        uni.addEventListener('mousemove',(e)=>{
+            let targe = e.target
+            if(moveround){
+                let x = e.x - lx
+                let y = e.y - ly
+                moveround.refresh(x,y)
+                uni.removeEventListener('click',any)
+            }
+            if(spacedown && moveuni){
+                let x = e.x - mx
+                let y = e.y - my
+                for (let r in all_rounds){
+                    let round = all_rounds[r]
+                    all_rounds[r].refresh(round.x + x,round.y + y)
+                }
+                mx = e.x
+                my = e.y
+            }
+        })
+        uni.addEventListener('mouseup',(e)=>{
+            if(moveround){
+                moveround = null
+                setTimeout(()=>{
+                    uni.addEventListener('click',any)
+                },38)
+            }
+            if(moveuni){
+                moveuni = false
+            }
+        })
+        uni.ondragstart=(e)=>{
+            let target = e.target
+            if(e.shiftKey && isList(target,'fanp') && !isList(target,'locked')){
+                e.dataTransfer.setData('start',round(target).id)
+                e.dataTransfer.setData('fxn1',attr(target,'fxn1'))
+                showFan('visible')
+            }else{
+                return false
+            }
+        }
+        uni.ondragover=(e)=>{
+            e.preventDefault()
+        }
+        uni.ondrop=(e)=>{
+            let target = e.target
+            if(isList(target,'fanp') && !isList(target,'locked')){
+                let start = e.dataTransfer.getData('start')
+                let end = round(target).id
+                if(start != end){
+                    let fxn1 = e.dataTransfer.getData('fxn1')
+                    let fxn2 = attr(target,'fxn1')
+                    all_rounds[start].createFx(null,fxn1,fxn2,all_rounds[end])
+                }
+            }
+        }
+        uni.ondragend=(e)=>{
+            let target = e.target
+            showFan('hidden')
+        }
+        document.onkeydown=(e)=>{
+            if(delline && (e.key === 'Delete' || e.key === 'Backspace')){
+                delline.remove()
+                delline = null
+            }
+            if(e.key == ' '){
+                spacedown = true
+            }
+            if(changeMode.innerHTML === 'Design mode'){
+                let fxbtn = $dom(`.goFleX${e.key}`)
+                fxbtn ? fxbtn.click() : ''
+            }
+        }
+        document.onkeyup=(e)=>{
+            if(spacedown){
+                spacedown = false
+            }
+        }
+        document.oninput=(e)=>{
+            let target = e.target
+            if(editround){
+                let fx = attr(target,'fx')
+                editround.content[fx].title = target.value
+            }
+        }
+    </script>
+</body>
+</html>
